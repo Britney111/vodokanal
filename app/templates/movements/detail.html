@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}{{ movement.document_number }}{% endblock %}
+{% block page_title %}Документ {{ movement.document_number }}{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+    <div class="col-md-8">
+        <!-- Шапка документа -->
+        <div class="card-block mb-3">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <div class="doc-number" style="font-size:18px">{{ movement.document_number }}</div>
+                    <div style="font-size:13px;color:#718096;margin-top:4px">
+                        {{ movement.date.strftime('%d.%m.%Y %H:%M') }} · {{ movement.created_by_user.full_name }}
+                    </div>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <span class="badge-type badge-{{ movement.movement_type }}" style="font-size:13px;padding:5px 12px">
+                        {{ movement.type_name }}
+                    </span>
+                    <span class="badge-type badge-{{ movement.status }}" style="font-size:13px;padding:5px 12px">
+                        {% if movement.status == 'draft' %}Черновик
+                        {% elif movement.status == 'confirmed' %}Проведён
+                        {% else %}Отменён{% endif %}
+                    </span>
+                </div>
+            </div>
+
+            <div class="row g-2" style="font-size:13px">
+                {% if movement.warehouse_from %}
+                <div class="col-md-6">
+                    <span style="color:#718096">Склад-источник:</span>
+                    <strong>{{ movement.warehouse_from.name }}</strong>
+                </div>
+                {% endif %}
+                {% if movement.warehouse_to %}
+                <div class="col-md-6">
+                    <span style="color:#718096">Склад-получатель:</span>
+                    <strong>{{ movement.warehouse_to.name }}</strong>
+                </div>
+                {% endif %}
+                {% if movement.supplier %}
+                <div class="col-md-6">
+                    <span style="color:#718096">Поставщик:</span>
+                    <strong>{{ movement.supplier.name }}</strong>
+                </div>
+                {% endif %}
+                {% if movement.notes %}
+                <div class="col-12">
+                    <span style="color:#718096">Примечание:</span> {{ movement.notes }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Позиции -->
+        <div class="data-table">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Товар</th>
+                        <th>Артикул</th>
+                        <th class="text-end">Кол-во</th>
+                        <th class="text-end">Цена, ₽</th>
+                        <th class="text-end">Сумма, ₽</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td style="color:#718096;font-size:12px">{{ loop.index }}</td>
+                        <td>
+                            <a href="{{ url_for('products.detail', id=item.product_id) }}" style="color:#1a2332;text-decoration:none">
+                                {{ item.product.name }}
+                            </a>
+                        </td>
+                        <td><span class="doc-number">{{ item.product.article or '—' }}</span></td>
+                        <td class="text-end" style="font-family:monospace">
+                            {{ item.quantity }} {{ item.product.unit.short_name }}
+                        </td>
+                        <td class="text-end" style="font-family:monospace">{{ '{:,.2f}'.format(item.price).replace(',', ' ') }}</td>
+                        <td class="text-end" style="font-family:monospace;font-weight:600">
+                            {{ '{:,.2f}'.format(item.total_price).replace(',', ' ') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr style="background:#f7f9fc">
+                        <td colspan="5" class="text-end" style="font-weight:600;font-size:13px">ИТОГО:</td>
+                        <td class="text-end" style="font-family:monospace;font-weight:700;color:#0a2e52;font-size:15px">
+                            {{ '{:,.2f}'.format(movement.total_amount).replace(',', ' ') }} ₽
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- Правая панель действий -->
+    <div class="col-md-4">
+        <div class="card-block mb-3">
+            <div class="section-title mb-3" style="font-size:15px">Действия</div>
+
+            {% if movement.status == 'draft' and current_user.is_manager %}
+            <form method="POST" action="{{ url_for('movements.confirm', id=movement.id) }}" class="mb-2">
+                <button type="submit" class="btn btn-success w-100"
+                    onclick="return confirm('Провести документ? Остатки на складе изменятся.')">
+                    <i class="bi bi-check-circle me-2"></i>Провести документ
+                </button>
+            </form>
+            {% endif %}
+
+            {% if movement.status == 'confirmed' and current_user.is_admin %}
+            <form method="POST" action="{{ url_for('movements.cancel', id=movement.id) }}" class="mb-2">
+                <button type="submit" class="btn btn-outline-danger w-100"
+                    onclick="return confirm('Отменить документ? Остатки будут возвращены.')">
+                    <i class="bi bi-x-circle me-2"></i>Отменить проведение
+                </button>
+            </form>
+            {% endif %}
+
+            <a href="{{ url_for('movements.index') }}" class="btn btn-outline-secondary w-100">
+                <i class="bi bi-arrow-left me-2"></i>К списку документов
+            </a>
+        </div>
+
+        <div class="card-block">
+            <div class="section-title mb-3" style="font-size:14px">Информация</div>
+            <div style="font-size:13px;line-height:2">
+                <div><span style="color:#718096">Создан:</span> {{ movement.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                <div><span style="color:#718096">Автор:</span> {{ movement.created_by_user.full_name }}</div>
+                <div><span style="color:#718096">Позиций:</span> {{ items|length }}</div>
+                <div><span style="color:#718096">Сумма:</span>
+                    <strong>{{ '{:,.2f}'.format(movement.total_amount).replace(',', ' ') }} ₽</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

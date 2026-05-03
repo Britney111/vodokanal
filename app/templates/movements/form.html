@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% set type_names = {'receipt': 'Приход товара', 'expense': 'Расход товара', 'transfer': 'Перемещение', 'writeoff': 'Акт списания'} %}
+{% block title %}{{ type_names[mov_type] }}{% endblock %}
+{% block page_title %}{{ type_names[mov_type] }}{% endblock %}
+
+{% block content %}
+<form method="POST" id="movForm">
+    <div class="row g-3">
+        <!-- Шапка документа -->
+        <div class="col-md-8">
+            <div class="card-block mb-3">
+                <div class="section-title mb-3" style="font-size:15px">Реквизиты документа</div>
+                <div class="row g-3">
+                    {% if mov_type in ('receipt',) %}
+                    <div class="col-md-6">
+                        <label class="form-label">Склад получения *</label>
+                        <select name="warehouse_to_id" class="form-select" required>
+                            <option value="">— выберите —</option>
+                            {% for w in warehouses %}
+                            <option value="{{ w.id }}">{{ w.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Поставщик</label>
+                        <select name="supplier_id" class="form-select">
+                            <option value="">— выберите —</option>
+                            {% for s in suppliers %}
+                            <option value="{{ s.id }}">{{ s.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% elif mov_type in ('expense', 'writeoff') %}
+                    <div class="col-md-6">
+                        <label class="form-label">Склад списания *</label>
+                        <select name="warehouse_from_id" class="form-select" required>
+                            <option value="">— выберите —</option>
+                            {% for w in warehouses %}
+                            <option value="{{ w.id }}">{{ w.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% elif mov_type == 'transfer' %}
+                    <div class="col-md-6">
+                        <label class="form-label">Склад-источник *</label>
+                        <select name="warehouse_from_id" class="form-select" required>
+                            <option value="">— выберите —</option>
+                            {% for w in warehouses %}
+                            <option value="{{ w.id }}">{{ w.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Склад-получатель *</label>
+                        <select name="warehouse_to_id" class="form-select" required>
+                            <option value="">— выберите —</option>
+                            {% for w in warehouses %}
+                            <option value="{{ w.id }}">{{ w.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div class="col-12">
+                        <label class="form-label">Примечание</label>
+                        <textarea name="notes" class="form-control" rows="2" placeholder="Основание, комментарий..."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Таблица товаров -->
+            <div class="card-block">
+                <div class="section-header mb-3">
+                    <div class="section-title" style="font-size:15px">Позиции документа</div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()">
+                        <i class="bi bi-plus-lg me-1"></i>Добавить строку
+                    </button>
+                </div>
+
+                <table class="table" id="itemsTable">
+                    <thead>
+                        <tr style="font-size:11px;color:#718096;text-transform:uppercase;letter-spacing:0.5px">
+                            <th style="width:45%">Товар</th>
+                            <th style="width:15%">Кол-во</th>
+                            <th style="width:20%">Цена, ₽</th>
+                            <th style="width:15%">Сумма, ₽</th>
+                            <th style="width:5%"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemsBody">
+                        <tr id="row-0">
+                            <td>
+                                <select name="product_id[]" class="form-select form-select-sm product-select" onchange="fillPrice(this)">
+                                    <option value="">— выберите товар —</option>
+                                    {% for p in products %}
+                                    <option value="{{ p.id }}" data-price="{{ p.price }}" data-unit="{{ p.unit.short_name }}" data-stock="{{ p.total_stock }}">
+                                        {% if p.article %}[{{ p.article }}] {% endif %}{{ p.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td><input type="number" name="quantity[]" class="form-control form-control-sm qty-input" min="0.001" step="0.001" value="1" onchange="calcRow(this)"></td>
+                            <td><input type="number" name="price[]" class="form-control form-control-sm price-input" min="0" step="0.01" value="0" onchange="calcRow(this)"></td>
+                            <td><input type="text" class="form-control form-control-sm sum-input" readonly style="background:#f7f9fc;font-family:monospace"></td>
+                            <td><button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeRow(this)"><i class="bi bi-x"></i></button></td>
+                        </tr>
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3" class="text-end" style="font-size:13px;font-weight:600;padding:10px 16px">ИТОГО:</td>
+                            <td><input type="text" id="totalSum" class="form-control form-control-sm" readonly style="background:#e8f4fb;font-family:monospace;font-weight:600;color:#0a2e52"></td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        <!-- Правая панель -->
+        <div class="col-md-4">
+            <div class="card-block mb-3">
+                <div class="section-title mb-3" style="font-size:15px">Тип операции</div>
+                <div style="padding:12px;background:#f7f9fc;border-radius:8px;border:1px solid #dde3ec">
+                    <div class="badge-type badge-{{ mov_type }} d-inline-block mb-2" style="font-size:13px;padding:5px 12px">
+                        {{ type_names[mov_type] }}
+                    </div>
+                    <div style="font-size:12px;color:#718096;line-height:1.5">
+                        {% if mov_type == 'receipt' %}
+                        Документ увеличивает остатки на складе-получателе. Статус «Черновик» — не изменяет остатки. Проведите документ для применения.
+                        {% elif mov_type == 'expense' %}
+                        Документ уменьшает остатки на складе. Система проверит наличие достаточного количества при проведении.
+                        {% elif mov_type == 'transfer' %}
+                        Перемещение уменьшает остаток на одном складе и увеличивает на другом. Склады должны быть разными.
+                        {% elif mov_type == 'writeoff' %}
+                        Акт списания уменьшает остатки. Укажите причину в поле «Примечание».
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-block">
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-floppy me-2"></i>Сохранить черновик
+                    </button>
+                    <a href="{{ url_for('movements.index') }}" class="btn btn-outline-secondary">
+                        Отмена
+                    </a>
+                </div>
+                <div class="mt-3 p-2" style="background:#fff7ed;border-radius:6px;font-size:12px;color:#92400e">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Документ будет сохранён как <strong>черновик</strong>. Для изменения остатков нажмите «Провести» на странице документа.
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let rowIndex = 1;
+
+function addRow() {
+    const tbody = document.getElementById('itemsBody');
+    const firstRow = document.getElementById('row-0');
+    const newRow = firstRow.cloneNode(true);
+    newRow.id = 'row-' + rowIndex++;
+
+    // Сброс значений
+    newRow.querySelector('.product-select').value = '';
+    newRow.querySelector('.qty-input').value = 1;
+    newRow.querySelector('.price-input').value = 0;
+    newRow.querySelector('.sum-input').value = '';
+
+    // Переназначаем обработчики
+    newRow.querySelector('.product-select').onchange = function() { fillPrice(this); };
+    newRow.querySelector('.qty-input').onchange = function() { calcRow(this); };
+    newRow.querySelector('.price-input').onchange = function() { calcRow(this); };
+    newRow.querySelector('button').onclick = function() { removeRow(this); };
+
+    tbody.appendChild(newRow);
+}
+
+function fillPrice(select) {
+    const opt = select.options[select.selectedIndex];
+    const row = select.closest('tr');
+    const priceInput = row.querySelector('.price-input');
+    const price = parseFloat(opt.dataset.price || 0);
+    priceInput.value = price.toFixed(2);
+    calcRow(priceInput);
+
+    // Показываем доступный остаток
+    const stock = opt.dataset.stock;
+    if (stock !== undefined && stock !== '') {
+        select.title = `Текущий остаток: ${stock} ${opt.dataset.unit || ''}`;
+    }
+}
+
+function calcRow(input) {
+    const row = input.closest('tr');
+    const qty = parseFloat(row.querySelector('.qty-input').value) || 0;
+    const price = parseFloat(row.querySelector('.price-input').value) || 0;
+    row.querySelector('.sum-input').value = (qty * price).toLocaleString('ru-RU', {minimumFractionDigits: 2});
+    calcTotal();
+}
+
+function calcTotal() {
+    let total = 0;
+    document.querySelectorAll('.sum-input').forEach(inp => {
+        const v = inp.value.replace(/\s/g,'').replace(',','.');
+        total += parseFloat(v) || 0;
+    });
+    document.getElementById('totalSum').value = total.toLocaleString('ru-RU', {minimumFractionDigits: 2});
+}
+
+function removeRow(btn) {
+    const tbody = document.getElementById('itemsBody');
+    if (tbody.rows.length <= 1) return;
+    btn.closest('tr').remove();
+    calcTotal();
+}
+
+// Инициализация первой строки
+calcRow(document.querySelector('.qty-input'));
+</script>
+{% endblock %}

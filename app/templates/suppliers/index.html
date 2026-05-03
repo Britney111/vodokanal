@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Поставщики{% endblock %}
+{% block page_title %}Поставщики{% endblock %}
+
+{% block content %}
+<div class="section-header mb-3">
+    <div><span class="text-muted" style="font-size:13px">Всего: {{ suppliers|length }}</span></div>
+    {% if current_user.is_manager %}
+    <a href="{{ url_for('suppliers.create') }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg me-1"></i>Добавить поставщика
+    </a>
+    {% endif %}
+</div>
+
+<div class="card-block mb-3">
+    <form method="GET">
+        <div class="row g-2">
+            <div class="col-md-6">
+                <input type="text" name="search" class="form-control form-control-sm"
+                    placeholder="Поиск по названию или ИНН..." value="{{ search }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary btn-sm w-100">Найти</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="data-table">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Наименование</th>
+                <th>ИНН</th>
+                <th>Контактное лицо</th>
+                <th>Телефон</th>
+                <th>Email</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in suppliers %}
+            <tr>
+                <td style="font-weight:500">{{ s.name }}</td>
+                <td><span class="doc-number">{{ s.inn or '—' }}</span></td>
+                <td style="font-size:13px">{{ s.contact_person or '—' }}</td>
+                <td style="font-size:13px">{{ s.phone or '—' }}</td>
+                <td style="font-size:13px;color:#0090d4">{{ s.email or '—' }}</td>
+                <td class="text-end">
+                    {% if current_user.is_manager %}
+                    <a href="{{ url_for('suppliers.edit', id=s.id) }}" class="btn btn-sm btn-outline-primary py-0 px-2">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center text-muted py-4">Поставщики не найдены</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

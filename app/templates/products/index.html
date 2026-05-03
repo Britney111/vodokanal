@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Товары{% endblock %}
+{% block page_title %}Номенклатура товаров{% endblock %}
+
+{% block content %}
+<div class="section-header mb-3">
+    <div>
+        <span class="text-muted" style="font-size:13px">Всего: {{ products.total }} позиций</span>
+    </div>
+    {% if current_user.is_manager %}
+    <a href="{{ url_for('products.create') }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg me-1"></i>Добавить товар
+    </a>
+    {% endif %}
+</div>
+
+<!-- Фильтры -->
+<div class="card-block mb-3">
+    <form method="GET" class="row g-2 align-items-end">
+        <div class="col-md-5">
+            <label class="form-label">Поиск</label>
+            <input type="text" name="search" class="form-control form-control-sm"
+                placeholder="Название или артикул..." value="{{ search }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Категория</label>
+            <select name="category_id" class="form-select form-select-sm">
+                <option value="">Все категории</option>
+                {% for cat in categories %}
+                <option value="{{ cat.id }}" {% if category_id == cat.id %}selected{% endif %}>
+                    {{ cat.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <button type="submit" class="btn btn-primary btn-sm w-100">
+                <i class="bi bi-search me-1"></i>Найти
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Таблица -->
+<div class="data-table">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Артикул</th>
+                <th>Наименование</th>
+                <th>Категория</th>
+                <th>Ед.изм.</th>
+                <th class="text-end">Остаток</th>
+                <th class="text-end">Цена, ₽</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in products.items %}
+            <tr>
+                <td><span class="doc-number">{{ p.article or '—' }}</span></td>
+                <td>
+                    <a href="{{ url_for('products.detail', id=p.id) }}" style="color:#1a2332;text-decoration:none;font-weight:500">
+                        {{ p.name }}
+                    </a>
+                    {% if p.is_low_stock %}
+                    <span class="low-stock-badge ms-1">⚠ дефицит</span>
+                    {% endif %}
+                </td>
+                <td style="font-size:12px;color:#718096">{{ p.category.name }}</td>
+                <td style="font-size:12px">{{ p.unit.short_name }}</td>
+                <td class="text-end">
+                    <span style="font-family:'IBM Plex Mono',mono;font-size:13px;
+                        color:{% if p.is_low_stock %}#ef4444{% else %}#22c55e{% endif %}">
+                        {{ p.total_stock }}
+                    </span>
+                </td>
+                <td class="text-end" style="font-family:'IBM Plex Mono',mono;font-size:13px">
+                    {{ '{:,.2f}'.format(p.price).replace(',', ' ') }}
+                </td>
+                <td class="text-end">
+                    <a href="{{ url_for('products.detail', id=p.id) }}" class="btn btn-sm btn-outline-secondary py-0 px-2">
+                        <i class="bi bi-eye"></i>
+                    </a>
+                    {% if current_user.is_manager %}
+                    <a href="{{ url_for('products.edit', id=p.id) }}" class="btn btn-sm btn-outline-primary py-0 px-2">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-center text-muted py-4">Товары не найдены</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Пагинация -->
+{% if products.pages > 1 %}
+<div class="d-flex justify-content-center mt-3">
+    <nav>
+        <ul class="pagination pagination-sm">
+            {% if products.has_prev %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('products.index', page=products.prev_num, search=search, category_id=category_id) }}">‹</a>
+            </li>
+            {% endif %}
+            {% for p in products.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                {% if p %}
+                <li class="page-item {% if p == products.page %}active{% endif %}">
+                    <a class="page-link" href="{{ url_for('products.index', page=p, search=search, category_id=category_id) }}">{{ p }}</a>
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+                {% endif %}
+            {% endfor %}
+            {% if products.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="{{ url_for('products.index', page=products.next_num, search=search, category_id=category_id) }}">›</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+{% endif %}
+{% endblock %}

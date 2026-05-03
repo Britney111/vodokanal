@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{% if product %}Редактировать товар{% else %}Новый товар{% endif %}{% endblock %}
+{% block page_title %}{% if product %}Редактировать товар{% else %}Добавить товар{% endif %}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <form method="POST">
+            <div class="card-block mb-3">
+                <div class="section-title mb-3" style="font-size:15px">Основные данные</div>
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label">Наименование *</label>
+                        <input type="text" name="name" class="form-control" required
+                            value="{{ product.name if product else '' }}"
+                            placeholder="Полное наименование товара">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Артикул / номенклатурный номер</label>
+                        <input type="text" name="article" class="form-control"
+                            value="{{ product.article if product and product.article else '' }}"
+                            placeholder="напр. ЗКЛ-100-16">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Штрихкод</label>
+                        <input type="text" name="barcode" class="form-control"
+                            value="{{ product.barcode if product and product.barcode else '' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Категория *</label>
+                        <select name="category_id" class="form-select" required>
+                            <option value="">— выберите —</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}" {% if product and product.category_id == cat.id %}selected{% endif %}>
+                                {{ cat.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Единица измерения *</label>
+                        <select name="unit_id" class="form-select" required>
+                            <option value="">— выберите —</option>
+                            {% for u in units %}
+                            <option value="{{ u.id }}" {% if product and product.unit_id == u.id %}selected{% endif %}>
+                                {{ u.name }} ({{ u.short_name }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Учётная цена, ₽</label>
+                        <input type="number" name="price" class="form-control" min="0" step="0.01"
+                            value="{{ product.price if product else '0' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Минимальный остаток</label>
+                        <input type="number" name="min_stock" class="form-control" min="0" step="0.001"
+                            value="{{ product.min_stock if product else '0' }}">
+                        <div class="form-text">Система предупредит при достижении этого уровня</div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Описание / характеристики</label>
+                        <textarea name="description" class="form-control" rows="3"
+                            placeholder="Технические характеристики, ГОСТ, примечания...">{{ product.description if product and product.description else '' }}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 justify-content-end">
+                <a href="{{ url_for('products.index') }}" class="btn btn-outline-secondary">Отмена</a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-floppy me-2"></i>
+                    {% if product %}Сохранить изменения{% else %}Создать товар{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

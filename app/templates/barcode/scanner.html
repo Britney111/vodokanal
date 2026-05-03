@@ -1,0 +1,765 @@
+{% extends "base.html" %}
+{% block title %}Сканер штрихкодов{% endblock %}
+{% block page_title %}Сканер штрихкодов{% endblock %}
+
+{% block extra_css %}
+<style>
+  .scanner-wrap {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 20px;
+    align-items: start;
+  }
+
+  /* ── Камера ── */
+  .camera-card {
+    background: #fff;
+    border: 1px solid #dde3ec;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .camera-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #f0f4f8;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .camera-title { font-size: 15px; font-weight: 600; color: #0a2e52; }
+
+  .camera-viewport {
+    position: relative;
+    background: #0a2e52;
+    min-height: 340px;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+
+  #scanner-video {
+    width: 100%;
+    display: block;
+    border-radius: 0;
+  }
+
+  /* Сетка прицела */
+  .scanner-overlay {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .scanner-target {
+    width: 240px; height: 120px;
+    position: relative;
+  }
+
+  .scanner-target::before, .scanner-target::after,
+  .scanner-corner-bl, .scanner-corner-br {
+    content: '';
+    position: absolute;
+    width: 28px; height: 28px;
+    border-color: #00c4a7;
+    border-style: solid;
+  }
+
+  .scanner-target::before { top: 0; left: 0; border-width: 3px 0 0 3px; }
+  .scanner-target::after  { top: 0; right: 0; border-width: 3px 3px 0 0; }
+  .scanner-corner-bl { bottom: 0; left: 0; border-width: 0 0 3px 3px; }
+  .scanner-corner-br { bottom: 0; right: 0; border-width: 0 3px 3px 0; }
+
+  /* Анимация сканирования */
+  .scan-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #00c4a7, transparent);
+    animation: scan 2s ease-in-out infinite;
+    top: 50%;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .scanning .scan-line { opacity: 1; }
+
+  @keyframes scan {
+    0%   { transform: translateY(-60px); }
+    50%  { transform: translateY(60px); }
+    100% { transform: translateY(-60px); }
+  }
+
+  .camera-placeholder {
+    text-align: center;
+    color: rgba(255,255,255,0.4);
+    padding: 40px;
+  }
+
+  .camera-placeholder i { font-size: 48px; display: block; margin-bottom: 12px; }
+  .camera-placeholder p { font-size: 13px; margin: 0; }
+
+  /* Статус */
+  .scan-status {
+    padding: 10px 16px;
+    font-size: 13px;
+    display: flex; align-items: center; gap: 8px;
+    border-top: 1px solid #f0f4f8;
+    min-height: 44px;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .status-idle .status-dot    { background: #cbd5e0; }
+  .status-active .status-dot  { background: #22c55e; animation: pulse 1s infinite; }
+  .status-found .status-dot   { background: #0090d4; }
+  .status-error .status-dot   { background: #ef4444; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
+  }
+
+  /* ── Ручной ввод ── */
+  .manual-input {
+    padding: 16px 20px;
+    border-top: 1px solid #f0f4f8;
+    display: flex; gap: 8px;
+  }
+
+  /* ── Результат ── */
+  .result-card {
+    background: #fff;
+    border: 1px solid #dde3ec;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .result-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #f0f4f8;
+    font-size: 15px; font-weight: 600; color: #0a2e52;
+  }
+
+  .result-body { padding: 20px; }
+
+  .product-card-inner {
+    display: none;
+  }
+
+  .product-card-inner.visible { display: block; }
+
+  .product-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #0a2e52;
+    margin-bottom: 4px;
+    line-height: 1.3;
+  }
+
+  .product-meta {
+    font-size: 12px;
+    color: #718096;
+    margin-bottom: 16px;
+  }
+
+  .stock-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .stock-item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid #dde3ec;
+  }
+
+  .stock-item.low { border-color: #fed7aa; background: #fff7ed; }
+
+  .stock-wh { font-size: 11px; color: #718096; margin-bottom: 3px; }
+  .stock-qty { font-size: 20px; font-weight: 600; font-family: monospace; color: #0a2e52; }
+  .stock-qty.low-qty { color: #ef4444; }
+  .stock-unit { font-size: 11px; color: #718096; }
+
+  .barcode-display {
+    padding: 12px;
+    background: #f7f9fc;
+    border-radius: 8px;
+    text-align: center;
+    font-family: monospace;
+    font-size: 15px;
+    letter-spacing: 2px;
+    color: #0a2e52;
+    margin-bottom: 16px;
+    border: 1px solid #dde3ec;
+  }
+
+  .result-actions { display: grid; gap: 8px; }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #718096;
+  }
+
+  .empty-state i { font-size: 40px; display: block; margin-bottom: 12px; opacity: 0.3; }
+  .empty-state p { font-size: 13px; margin: 0; }
+
+  /* ── История сканирований ── */
+  .history-section {
+    margin-top: 20px;
+    background: #fff;
+    border: 1px solid #dde3ec;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .history-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid #f0f4f8;
+    font-size: 13px;
+    font-weight: 600;
+    color: #4a5568;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+
+  .history-list { max-height: 300px; overflow-y: auto; }
+
+  .history-item {
+    padding: 10px 20px;
+    border-bottom: 1px solid #f7f9fc;
+    font-size: 13px;
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .history-item:hover { background: #f7fbff; }
+  .history-item:last-child { border-bottom: none; }
+
+  .history-code { font-family: monospace; color: #0090d4; font-size: 12px; }
+  .history-name { font-weight: 500; color: #1a2332; flex: 1; }
+  .history-time { font-size: 11px; color: #cbd5e0; }
+
+  /* ── Режим привязки ── */
+  .bind-mode {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    display: none;
+  }
+
+  .bind-mode.active { display: block; }
+
+  @media (max-width: 900px) {
+    .scanner-wrap { grid-template-columns: 1fr; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="scanner-wrap">
+
+  <!-- ── Левая колонка: камера ── -->
+  <div>
+    <div class="camera-card">
+      <div class="camera-header">
+        <div class="camera-title">
+          <i class="bi bi-upc-scan me-2 text-primary"></i>Сканер штрихкода
+        </div>
+        <div class="d-flex gap-2">
+          <button id="btnStartScan" class="btn btn-primary btn-sm" onclick="startScanner()">
+            <i class="bi bi-camera me-1"></i>Включить камеру
+          </button>
+          <button id="btnStopScan" class="btn btn-outline-secondary btn-sm d-none" onclick="stopScanner()">
+            <i class="bi bi-stop-circle me-1"></i>Стоп
+          </button>
+        </div>
+      </div>
+
+      <div class="camera-viewport" id="viewport">
+        <div class="camera-placeholder" id="placeholder">
+          <i class="bi bi-camera-video-off"></i>
+          <p>Нажмите «Включить камеру»<br>для сканирования штрихкодов</p>
+        </div>
+        <video id="scanner-video" autoplay playsinline style="display:none"></video>
+        <div class="scanner-overlay" id="scannerOverlay" style="display:none">
+          <div class="scanner-target">
+            <span class="scanner-corner-bl"></span>
+            <span class="scanner-corner-br"></span>
+            <div class="scan-line"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="scan-status status-idle" id="scanStatus">
+        <div class="status-dot"></div>
+        <span id="scanStatusText">Ожидание</span>
+      </div>
+
+      <!-- Ручной ввод -->
+      <div class="manual-input">
+        <input type="text" id="manualInput" class="form-control form-control-sm"
+          placeholder="Введите штрихкод или артикул вручную..."
+          onkeydown="if(event.key==='Enter') lookupManual()">
+        <button class="btn btn-outline-primary btn-sm px-3" onclick="lookupManual()">
+          <i class="bi bi-search"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- История -->
+    <div class="history-section">
+      <div class="history-header">
+        <span><i class="bi bi-clock-history me-2"></i>История сканирований</span>
+        <button class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="clearHistory()">Очистить</button>
+      </div>
+      <div class="history-list" id="historyList">
+        <div class="empty-state" style="padding:20px">
+          <p>История пуста</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Правая колонка: результат ── -->
+  <div>
+    <div class="result-card">
+      <div class="result-header">
+        <i class="bi bi-box-seam me-2"></i>Информация о товаре
+      </div>
+      <div class="result-body">
+
+        <!-- Режим привязки штрихкода -->
+        <div class="bind-mode" id="bindMode">
+          <i class="bi bi-link-45deg me-1 text-warning"></i>
+          <strong>Режим привязки:</strong> отсканируйте штрихкод для привязки к товару
+          <button class="btn btn-sm btn-outline-secondary ms-2 py-0" onclick="cancelBind()">Отмена</button>
+        </div>
+
+        <!-- Пустое состояние -->
+        <div class="empty-state" id="emptyState">
+          <i class="bi bi-upc"></i>
+          <p>Отсканируйте штрихкод<br>или введите его вручную</p>
+        </div>
+
+        <!-- Найденный товар -->
+        <div class="product-card-inner" id="productInfo">
+          <div class="barcode-display" id="scannedCode">—</div>
+
+          <div class="product-name" id="productName">—</div>
+          <div class="product-meta" id="productMeta">—</div>
+
+          <div class="stock-grid" id="stockGrid"></div>
+
+          <div class="result-actions">
+            <a href="#" id="btnViewProduct" class="btn btn-primary btn-sm">
+              <i class="bi bi-eye me-2"></i>Открыть карточку товара
+            </a>
+            <a href="#" id="btnReceipt" class="btn btn-outline-success btn-sm">
+              <i class="bi bi-arrow-down-circle me-2"></i>Оформить приход
+            </a>
+            <a href="#" id="btnExpense" class="btn btn-outline-danger btn-sm">
+              <i class="bi bi-arrow-up-circle me-2"></i>Оформить расход
+            </a>
+          </div>
+        </div>
+
+        <!-- Не найден -->
+        <div class="product-card-inner" id="notFoundInfo">
+          <div class="barcode-display" id="notFoundCode" style="color:#ef4444">—</div>
+          <div style="text-align:center; padding: 12px 0 20px">
+            <i class="bi bi-exclamation-circle text-danger" style="font-size:32px; display:block; margin-bottom:8px"></i>
+            <div style="font-weight:600;color:#ef4444;margin-bottom:4px">Товар не найден</div>
+            <div style="font-size:13px;color:#718096">Штрихкод не привязан ни к одному товару</div>
+          </div>
+          <div class="result-actions">
+            <button class="btn btn-outline-primary btn-sm" onclick="openBindModal()">
+              <i class="bi bi-link-45deg me-2"></i>Привязать к товару
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Модалка привязки штрихкода к товару ── -->
+<div class="modal fade" id="bindModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" style="font-size:15px;font-weight:600">
+          <i class="bi bi-link-45deg me-2"></i>Привязать штрихкод к товару
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#4a5568">Штрихкод</label>
+          <input type="text" id="bindBarcodeInput" class="form-control" readonly>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#4a5568">Товар</label>
+          <input type="text" id="bindProductSearch" class="form-control" placeholder="Введите название или артикул..."
+            oninput="searchForBind(this.value)">
+        </div>
+        <div id="bindSearchResults" style="max-height:200px;overflow-y:auto;border:1px solid #dde3ec;border-radius:6px;display:none"></div>
+        <input type="hidden" id="bindProductId">
+        <div id="bindSelectedProduct" style="display:none;padding:8px 12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;font-size:13px;margin-top:8px">
+          <i class="bi bi-check-circle text-success me-1"></i>
+          <span id="bindSelectedName"></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Отмена</button>
+        <button class="btn btn-primary btn-sm" onclick="saveBind()">
+          <i class="bi bi-link-45deg me-1"></i>Привязать
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- QuaggaJS — сканер штрихкодов через камеру -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+
+<script>
+let scannerActive = false;
+let videoStream = null;
+let lastCode = '';
+let lastScanTime = 0;
+let scanHistory = JSON.parse(sessionStorage.getItem('scanHistory') || '[]');
+let currentBarcode = '';
+let bindBarcode = '';
+
+renderHistory();
+
+// ═══════════════════════════════════════════
+// СКАНЕР
+// ═══════════════════════════════════════════
+
+async function startScanner() {
+  try {
+    setStatus('active', 'Запрос доступа к камере...');
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+
+    videoStream = stream;
+    const video = document.getElementById('scanner-video');
+    video.srcObject = stream;
+    video.style.display = 'block';
+    document.getElementById('placeholder').style.display = 'none';
+    document.getElementById('scannerOverlay').style.display = 'flex';
+    document.getElementById('scannerOverlay').classList.add('scanning');
+
+    document.getElementById('btnStartScan').classList.add('d-none');
+    document.getElementById('btnStopScan').classList.remove('d-none');
+
+    // Запускаем QuaggaJS
+    Quagga.init({
+      inputStream: {
+        name: 'Live',
+        type: 'LiveStream',
+        target: video,
+        constraints: { facingMode: 'environment' },
+      },
+      decoder: {
+        readers: [
+          'ean_reader',
+          'ean_8_reader',
+          'code_128_reader',
+          'code_39_reader',
+          'code_93_reader',
+          'upc_reader',
+          'upc_e_reader',
+          'i2of5_reader',
+        ]
+      },
+      locate: true,
+      numOfWorkers: 2,
+      frequency: 10,
+    }, function(err) {
+      if (err) {
+        setStatus('error', 'Ошибка инициализации сканера: ' + err.message);
+        return;
+      }
+      Quagga.start();
+      scannerActive = true;
+      setStatus('active', 'Наведите камеру на штрихкод');
+    });
+
+    // Обработчик найденного кода
+    Quagga.onDetected(function(result) {
+      const code = result.codeResult.code;
+      const now = Date.now();
+
+      // Дебаунс — игнорируем повторы в течение 2.5 секунд
+      if (code === lastCode && (now - lastScanTime) < 2500) return;
+
+      lastCode = code;
+      lastScanTime = now;
+
+      // Звуковой сигнал
+      playBeep();
+
+      setStatus('found', `Считан: ${code}`);
+      lookupBarcode(code);
+    });
+
+  } catch(e) {
+    if (e.name === 'NotAllowedError') {
+      setStatus('error', 'Доступ к камере запрещён — проверьте настройки браузера');
+    } else if (e.name === 'NotFoundError') {
+      setStatus('error', 'Камера не обнаружена');
+    } else {
+      setStatus('error', 'Ошибка: ' + e.message);
+    }
+  }
+}
+
+function stopScanner() {
+  if (scannerActive) {
+    Quagga.stop();
+    scannerActive = false;
+  }
+  if (videoStream) {
+    videoStream.getTracks().forEach(t => t.stop());
+    videoStream = null;
+  }
+  const video = document.getElementById('scanner-video');
+  video.style.display = 'none';
+  video.srcObject = null;
+  document.getElementById('placeholder').style.display = 'flex';
+  document.getElementById('scannerOverlay').style.display = 'none';
+  document.getElementById('btnStartScan').classList.remove('d-none');
+  document.getElementById('btnStopScan').classList.add('d-none');
+  setStatus('idle', 'Сканер остановлен');
+}
+
+function setStatus(type, text) {
+  const el = document.getElementById('scanStatus');
+  el.className = 'scan-status status-' + type;
+  document.getElementById('scanStatusText').textContent = text;
+}
+
+// ═══════════════════════════════════════════
+// ПОИСК ТОВАРА
+// ═══════════════════════════════════════════
+
+async function lookupBarcode(code) {
+  currentBarcode = code;
+
+  // Режим привязки — не ищем, а запоминаем код
+  if (bindBarcode !== '') {
+    document.getElementById('bindBarcodeInput').value = code;
+    bindBarcode = code;
+    new bootstrap.Modal(document.getElementById('bindModal')).show();
+    return;
+  }
+
+  try {
+    const resp = await fetch(`/api/barcode/${encodeURIComponent(code)}`);
+    const data = await resp.json();
+
+    if (resp.ok && data.found) {
+      showProduct(data.product, data.stocks, code);
+      addToHistory(code, data.product.name, data.product.id);
+    } else {
+      showNotFound(code);
+      addToHistory(code, null, null);
+    }
+  } catch(e) {
+    setStatus('error', 'Ошибка запроса к серверу');
+  }
+}
+
+function lookupManual() {
+  const code = document.getElementById('manualInput').value.trim();
+  if (!code) return;
+  lookupBarcode(code);
+  document.getElementById('manualInput').value = '';
+}
+
+function showProduct(product, stocks, code) {
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('notFoundInfo').classList.remove('visible');
+  document.getElementById('productInfo').classList.add('visible');
+
+  document.getElementById('scannedCode').textContent = code || product.barcode || product.article || '—';
+  document.getElementById('productName').textContent = product.name;
+  document.getElementById('productMeta').textContent =
+    `${product.category}  ·  Артикул: ${product.article || '—'}  ·  ${product.unit}`;
+
+  // Остатки по складам
+  const grid = document.getElementById('stockGrid');
+  grid.innerHTML = '';
+  if (stocks.length === 0) {
+    grid.innerHTML = '<div style="color:#718096;font-size:13px;grid-column:1/-1">Нет данных об остатках</div>';
+  } else {
+    stocks.forEach(s => {
+      const isLow = s.quantity <= 0;
+      grid.innerHTML += `
+        <div class="stock-item ${isLow ? 'low' : ''}">
+          <div class="stock-wh">${s.warehouse_name}</div>
+          <div class="stock-qty ${isLow ? 'low-qty' : ''}">${s.quantity}</div>
+          <div class="stock-unit">${product.unit}</div>
+        </div>`;
+    });
+  }
+
+  // Кнопки
+  document.getElementById('btnViewProduct').href = `/products/${product.id}`;
+  document.getElementById('btnReceipt').href = `/movements/create/receipt`;
+  document.getElementById('btnExpense').href = `/movements/create/expense`;
+
+  if (product.is_low_stock) {
+    setStatus('found', `⚠ ${product.name} — ДЕФИЦИТ`);
+  }
+}
+
+function showNotFound(code) {
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('productInfo').classList.remove('visible');
+  document.getElementById('notFoundInfo').classList.add('visible');
+  document.getElementById('notFoundCode').textContent = code;
+  currentBarcode = code;
+}
+
+// ═══════════════════════════════════════════
+// ИСТОРИЯ
+// ═══════════════════════════════════════════
+
+function addToHistory(code, name, productId) {
+  const time = new Date().toLocaleTimeString('ru-RU', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  scanHistory.unshift({ code, name, productId, time });
+  if (scanHistory.length > 50) scanHistory.pop();
+  sessionStorage.setItem('scanHistory', JSON.stringify(scanHistory));
+  renderHistory();
+}
+
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  if (scanHistory.length === 0) {
+    list.innerHTML = '<div class="empty-state" style="padding:20px"><p>История пуста</p></div>';
+    return;
+  }
+  list.innerHTML = scanHistory.map(item => `
+    <div class="history-item" onclick="lookupBarcode('${item.code}')">
+      <i class="bi bi-${item.name ? 'check-circle text-success' : 'x-circle text-danger'}" style="font-size:14px"></i>
+      <span class="history-code">${item.code}</span>
+      <span class="history-name">${item.name || 'Не найден'}</span>
+      <span class="history-time">${item.time}</span>
+    </div>
+  `).join('');
+}
+
+function clearHistory() {
+  scanHistory = [];
+  sessionStorage.removeItem('scanHistory');
+  renderHistory();
+}
+
+// ═══════════════════════════════════════════
+// ПРИВЯЗКА ШТРИХКОДА
+// ═══════════════════════════════════════════
+
+function openBindModal() {
+  document.getElementById('bindBarcodeInput').value = currentBarcode;
+  document.getElementById('bindProductSearch').value = '';
+  document.getElementById('bindSearchResults').style.display = 'none';
+  document.getElementById('bindSelectedProduct').style.display = 'none';
+  document.getElementById('bindProductId').value = '';
+  new bootstrap.Modal(document.getElementById('bindModal')).show();
+}
+
+let bindSearchTimer;
+async function searchForBind(q) {
+  clearTimeout(bindSearchTimer);
+  if (q.length < 2) {
+    document.getElementById('bindSearchResults').style.display = 'none';
+    return;
+  }
+  bindSearchTimer = setTimeout(async () => {
+    const resp = await fetch(`/api/products/search?q=${encodeURIComponent(q)}`);
+    const products = await resp.json();
+    const results = document.getElementById('bindSearchResults');
+    if (products.length === 0) {
+      results.innerHTML = '<div style="padding:12px;font-size:13px;color:#718096">Ничего не найдено</div>';
+    } else {
+      results.innerHTML = products.map(p => `
+        <div onclick="selectBindProduct(${p.id}, '${p.name.replace(/'/g, '')}')"
+             style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f4f8"
+             onmouseover="this.style.background='#f7fbff'" onmouseout="this.style.background=''">
+          <strong>${p.name}</strong>
+          <span style="color:#718096;margin-left:8px">${p.article}</span>
+        </div>`).join('');
+    }
+    results.style.display = 'block';
+  }, 300);
+}
+
+function selectBindProduct(id, name) {
+  document.getElementById('bindProductId').value = id;
+  document.getElementById('bindSelectedName').textContent = name;
+  document.getElementById('bindSelectedProduct').style.display = 'block';
+  document.getElementById('bindSearchResults').style.display = 'none';
+  document.getElementById('bindProductSearch').value = name;
+}
+
+async function saveBind() {
+  const barcode = document.getElementById('bindBarcodeInput').value;
+  const productId = document.getElementById('bindProductId').value;
+  if (!productId) { alert('Выберите товар из списка'); return; }
+
+  const resp = await fetch('/api/barcode/set', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ product_id: parseInt(productId), barcode })
+  });
+  const data = await resp.json();
+
+  if (resp.ok) {
+    bootstrap.Modal.getInstance(document.getElementById('bindModal')).hide();
+    // Сразу показываем найденный товар
+    lookupBarcode(barcode);
+  } else {
+    alert(data.error || 'Ошибка сохранения');
+  }
+}
+
+function cancelBind() {
+  bindBarcode = '';
+  document.getElementById('bindMode').classList.remove('active');
+}
+
+// ═══════════════════════════════════════════
+// ЗВУК
+// ═══════════════════════════════════════════
+
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 1200;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.15);
+  } catch(e) {}
+}
+</script>
+{% endblock %}

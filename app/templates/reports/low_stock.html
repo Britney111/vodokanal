@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Дефицит товаров{% endblock %}
+{% block page_title %}Товары с низким остатком{% endblock %}
+
+{% block content %}
+{% if products %}
+<div class="alert alert-warning mb-3" style="font-size:14px">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+    Найдено <strong>{{ products|length }}</strong> позиций, требующих пополнения.
+</div>
+
+<div class="data-table">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Артикул</th>
+                <th>Наименование</th>
+                <th>Категория</th>
+                <th class="text-end">Текущий остаток</th>
+                <th class="text-end">Минимум</th>
+                <th class="text-end">Дефицит</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in products %}
+            <tr>
+                <td><span class="doc-number">{{ p.article or '—' }}</span></td>
+                <td><a href="{{ url_for('products.detail', id=p.id) }}" style="color:#1a2332;text-decoration:none;font-weight:500">{{ p.name }}</a></td>
+                <td style="font-size:12px;color:#718096">{{ p.category.name }}</td>
+                <td class="text-end" style="font-family:monospace;color:#ef4444;font-weight:600">
+                    {{ p.total_stock }} {{ p.unit.short_name }}
+                </td>
+                <td class="text-end" style="font-family:monospace;color:#718096">
+                    {{ p.min_stock }} {{ p.unit.short_name }}
+                </td>
+                <td class="text-end" style="font-family:monospace;color:#ef4444">
+                    {{ (p.min_stock - p.total_stock)|round(3) }} {{ p.unit.short_name }}
+                </td>
+                <td>
+                    <a href="{{ url_for('movements.create', mov_type='receipt') }}" class="btn btn-sm btn-outline-success py-0 px-2">
+                        <i class="bi bi-plus-lg"></i> Приход
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card-block text-center py-5">
+    <i class="bi bi-check-circle-fill text-success" style="font-size:48px"></i>
+    <h4 class="mt-3" style="color:#0a2e52">Все товары в норме</h4>
+    <p class="text-muted" style="font-size:14px">Остатки всех позиций превышают минимальный уровень.</p>
+</div>
+{% endif %}
+{% endblock %}

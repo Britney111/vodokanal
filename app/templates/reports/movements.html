@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Отчёт по движению{% endblock %}
+{% block page_title %}Отчёт по движению товаров{% endblock %}
+
+{% block content %}
+<div class="card-block mb-3">
+    <form method="GET" class="row g-2 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label">Период с</label>
+            <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from }}">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">По</label>
+            <input type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to }}">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Тип операции</label>
+            <select name="movement_type" class="form-select form-select-sm">
+                <option value="">Все</option>
+                <option value="receipt" {% if movement_type=='receipt' %}selected{% endif %}>Приход</option>
+                <option value="expense" {% if movement_type=='expense' %}selected{% endif %}>Расход</option>
+                <option value="transfer" {% if movement_type=='transfer' %}selected{% endif %}>Перемещение</option>
+                <option value="writeoff" {% if movement_type=='writeoff' %}selected{% endif %}>Списание</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <button type="submit" class="btn btn-primary btn-sm w-100">Сформировать</button>
+        </div>
+    </form>
+</div>
+
+<!-- Сводка -->
+{% if summary %}
+<div class="row g-2 mb-3">
+    {% for type_key, data in summary.items() %}
+    {% set type_labels = {'receipt': 'Приход', 'expense': 'Расход', 'transfer': 'Перемещение', 'writeoff': 'Списание'} %}
+    <div class="col-md-3">
+        <div class="stat-card {% if type_key=='receipt' %}green{% elif type_key=='expense' %}red{% else %}blue{% endif %}">
+            <div class="stat-value" style="font-size:24px">{{ data.count }}</div>
+            <div class="stat-label">{{ type_labels.get(type_key, type_key) }}</div>
+            <div style="font-size:12px;color:#718096;margin-top:4px;font-family:monospace">
+                {{ '{:,.0f}'.format(data.total).replace(',', ' ') }} ₽
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="data-table">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Документ</th>
+                <th>Тип</th>
+                <th>Дата</th>
+                <th>Товар</th>
+                <th class="text-end">Кол-во</th>
+                <th class="text-end">Сумма, ₽</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item, movement, product in results %}
+            <tr>
+                <td><a href="{{ url_for('movements.detail', id=movement.id) }}" class="doc-number">{{ movement.document_number }}</a></td>
+                <td><span class="badge-type badge-{{ movement.movement_type }}">{{ movement.type_name }}</span></td>
+                <td style="font-size:12px;color:#718096">{{ movement.date.strftime('%d.%m.%Y') }}</td>
+                <td style="font-size:13px">{{ product.name[:50] }}{% if product.name|length > 50 %}…{% endif %}</td>
+                <td class="text-end" style="font-family:monospace">{{ item.quantity }} {{ product.unit.short_name }}</td>
+                <td class="text-end" style="font-family:monospace">{{ '{:,.2f}'.format(item.total_price).replace(',', ' ') }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center text-muted py-4">Нет данных за выбранный период</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
